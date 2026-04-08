@@ -1,0 +1,90 @@
+services:
+
+  # ── PostgreSQL (Section DB) ──────────────────────────────
+  section-db:
+    image: postgres:17-alpine
+    container_name: section-db
+    environment:
+      POSTGRES_DB: section_db
+      POSTGRES_USER: section
+      POSTGRES_PASSWORD: section
+    ports:
+      - "5432:5432"
+    volumes:
+      - section-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U section -d section_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Apache Kafka (KRaft, без Zookeeper) ──────────────────
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Kafka UI (опциональный, для отладки) ─────────────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    ports:
+      - "8090:8080"
+
+  # ── MongoDB (Statement DB) ──────────────────────────────
+  statement-db:
+    image: mongo:7
+    container_name: statement-db
+    environment:
+      MONGO_INITDB_DATABASE: statement_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - statement-db-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Redis (Notification DB) ──────────────────────────────
+  notification-db:
+    image: redis:7-alpine
+    container_name: notification-db
+    ports:
+      - "6379:6379"
+    volumes:
+      - notification-db-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  section-db-data:
+  statement-db-data:
+  notification-db-data:
